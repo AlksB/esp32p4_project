@@ -2,3 +2,4 @@ dependencies:
   idf: ">=5.3"
   espressif/esp_lvgl_port: "^2.0"
   espressif/esp_lcd_touch_ft5x06: "*"
+  lvgl/lvgl: "^9.0"

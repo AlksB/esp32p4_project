@@ -1,15 +1,15 @@
+#include "demos/lv_demos.h"
+#include "esp_lcd_touch_ft5x06.h"
+#include "esp_log.h"
+#include "esp_lvgl_port.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_log.h"
-#include "rpi_display.h"
-#include "esp_lvgl_port.h"
-#include "esp_lcd_touch_ft5x06.h"
 #include "lvgl.h"
+#include "rpi_display.h"
 
 static const char *TAG = "main";
 
-static void lvgl_demo(lv_display_t *disp)
-{
+static void lvgl_demo(lv_display_t *disp) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
     // Фон
@@ -32,8 +32,7 @@ static void lvgl_demo(lv_display_t *disp)
     lv_obj_center(btn_label);
 }
 
-void app_main(void)
-{
+void app_main(void) {
     ESP_LOGI(TAG, "Starting");
 
     // 1. Инициализация дисплея
@@ -46,18 +45,19 @@ void app_main(void)
 
     // 3. Добавляем дисплей в LVGL
     const lvgl_port_display_cfg_t disp_cfg = {
-        .io_handle    = NULL,
+        .io_handle = NULL,
         .panel_handle = rpi_display_get_panel(),
-        .buffer_size  = RPI_DISPLAY_WIDTH * 30,
+        .buffer_size = RPI_DISPLAY_WIDTH * 30,
         .double_buffer = false,
-        .hres         = RPI_DISPLAY_WIDTH,
-        .vres         = RPI_DISPLAY_HEIGHT,
-        .monochrome   = false,
+        .hres = RPI_DISPLAY_WIDTH,
+        .vres = RPI_DISPLAY_HEIGHT,
+        .monochrome = false,
         .color_format = LV_COLOR_FORMAT_RGB888,
-        .flags = {
-            .buff_spiram = true,
-            .sw_rotate   = false,
-        },
+        .flags =
+            {
+                .buff_spiram = true,
+                .sw_rotate = false,
+            },
     };
     const lvgl_port_display_dsi_cfg_t dsi_cfg = {
         .flags.avoid_tearing = false,
@@ -74,32 +74,34 @@ void app_main(void)
         .flags.disable_control_phase = 1,
         .scl_speed_hz = 100000,
     };
-    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(
-        rpi_display_get_i2c_bus(), &tp_io_cfg, &tp_io));
-    
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(rpi_display_get_i2c_bus(),
+                                             &tp_io_cfg, &tp_io));
+
     esp_lcd_touch_handle_t tp = NULL;
     esp_lcd_touch_config_t tp_cfg = {
         .x_max = RPI_DISPLAY_WIDTH,
         .y_max = RPI_DISPLAY_HEIGHT,
         .rst_gpio_num = -1,
         .int_gpio_num = -1,
-        .flags = {
-            .mirror_x = true,
-            .mirror_y = true,
-        },
+        .flags =
+            {
+                .mirror_x = true,
+                .mirror_y = true,
+            },
     };
     ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_ft5x06(tp_io, &tp_cfg, &tp));
-    
+
     // Подключаем к LVGL
     const lvgl_port_touch_cfg_t touch_cfg = {
-        .disp  = disp,
+        .disp = disp,
         .handle = tp,
     };
     lvgl_port_add_touch(&touch_cfg);
 
     // 4. Рисуем UI
+    // Внутри lvgl_port_lock:
     if (lvgl_port_lock(0)) {
-        lvgl_demo(disp);
+        lv_demo_widgets();
         lvgl_port_unlock();
     }
 

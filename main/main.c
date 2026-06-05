@@ -2,36 +2,72 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "rpi_display.h"
-#include "mipi_dsi_priv.h"  // должен быть первым среди esp_lcd includes
+#include "esp_lvgl_port.h"
+#include "lvgl.h"
 
+static const char *TAG = "main";
+
+static void lvgl_demo(lv_display_t *disp)
+{
+    lv_obj_t *scr = lv_display_get_screen_active(disp);
+
+    // Фон
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x1a1a2e), LV_PART_MAIN);
+
+    // Надпись
+    lv_obj_t *label = lv_label_create(scr);
+    lv_label_set_text(label, "Hello ESP32-P4!");
+    lv_obj_set_style_text_color(label, lv_color_hex(0xffffff), LV_PART_MAIN);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -40);
+
+    // Кнопка
+    lv_obj_t *btn = lv_button_create(scr);
+    lv_obj_set_size(btn, 200, 60);
+    lv_obj_align(btn, LV_ALIGN_CENTER, 0, 40);
+
+    lv_obj_t *btn_label = lv_label_create(btn);
+    lv_label_set_text(btn_label, "Click me!");
+    lv_obj_center(btn_label);
+}
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Starting RPi 7\" display demo");
+    ESP_LOGI(TAG, "Starting");
 
+    // 1. Инициализация дисплея
     rpi_display_config_t cfg = RPI_DISPLAY_DEFAULT_CONFIG();
+    ESP_ERROR_CHECK(rpi_display_init(&cfg));
 
-    esp_err_t ret = rpi_display_init(&cfg);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Display init failed: %s", esp_err_to_name(ret));
-        return;
+    // 2. LVGL port init
+    const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+    ESP_ERROR_CHECK(lvgl_port_init(&lvgl_cfg));
+
+    // 3. Добавляем дисплей в LVGL
+    const lvgl_port_display_cfg_t disp_cfg = {
+        .io_handle    = NULL,
+        .panel_handle = rpi_display_get_panel(),
+        .buffer_size  = RPI_DISPLAY_WIDTH * 30,
+        .double_buffer = false,
+        .hres         = RPI_DISPLAY_WIDTH,
+        .vres         = RPI_DISPLAY_HEIGHT,
+        .monochrome   = false,
+        .color_format = LV_COLOR_FORMAT_RGB888,
+        .flags = {
+            .buff_spiram = true,
+            .sw_rotate   = false,
+        },
+    };
+    const lvgl_port_display_dsi_cfg_t dsi_cfg = {
+        .flags.avoid_tearing = false,
+    };
+    lv_display_t *disp = lvgl_port_add_disp_dsi(&disp_cfg, &dsi_cfg);
+
+    // 4. Рисуем UI
+    if (lvgl_port_lock(0)) {
+        lvgl_demo(disp);
+        lvgl_port_unlock();
     }
 
-    ESP_LOGI(TAG, "Display init OK");
-
-    // Заливаем framebuffer красным для проверки
-    void *fb = rpi_display_get_framebuffer();
-    if (fb) {
-        uint8_t *p = (uint8_t *)fb;
-        for (int i = 0; i < RPI_DISPLAY_WIDTH * RPI_DISPLAY_HEIGHT; i++) {
-            p[i * 3 + 2] = 0xff; // R
-            p[i * 3 + 1] = 0x00; // G
-            p[i * 3 + 0] = 0x00; // B
-        }
-        rpi_display_flush_framebuffer();
-    }
-
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    ESP_LOGI(TAG, "Done");
 }

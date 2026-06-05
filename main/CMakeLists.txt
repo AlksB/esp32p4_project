@@ -1,2 +1,6 @@
-idf_component_register(SRCS "esp32p4_project.c"
-                    INCLUDE_DIRS ".")
+idf_component_register(
+    SRCS "main.c"
+    INCLUDE_DIRS "."
+    REQUIRES rpi_display esp_lcd esp_hw_support log freertos
+)
+

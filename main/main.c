@@ -1,13 +1,14 @@
 #include "camera.h"
 #include "demos/lv_demos.h"
+#include "esp_heap_caps.h"
 #include "esp_lcd_touch_ft5x06.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
+#include "ppa_conv.h"
 #include "rpi_display.h"
-#include "esp_heap_caps.h"
 
 static const char *TAG = "main";
 
@@ -43,10 +44,12 @@ void app_main(void) {
 
     // После rpi_display_init:
     ESP_LOGI(TAG, "Init camera...");
-    void *cam_fb = heap_caps_aligned_alloc(128, CAMERA_FB_SIZE, MALLOC_CAP_SPIRAM);
+    void *cam_fb =
+        heap_caps_aligned_alloc(128, CAMERA_FB_SIZE, MALLOC_CAP_SPIRAM);
     assert(cam_fb != NULL);
     ESP_ERROR_CHECK(camera_init(rpi_display_get_i2c_bus(), cam_fb));
     ESP_LOGI(TAG, "Camera OK, getting frames...");
+    ESP_ERROR_CHECK(ppa_conv_init());
 
     // 2. LVGL port init
     const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
@@ -119,6 +122,8 @@ void app_main(void) {
     while (1) {
         esp_err_t ret = camera_get_frame();
         if (ret == ESP_OK) {
+            ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640,
+                                      rpi_display_get_framebuffer(), 800, 480);
             ESP_LOGI(TAG, "Frame received");
         } else {
             ESP_LOGE(TAG, "Frame error: %s", esp_err_to_name(ret));

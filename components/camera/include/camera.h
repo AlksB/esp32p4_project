@@ -1,51 +1,43 @@
-/*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
 #pragma once
 
 #include "driver/i2c_master.h"
-#include "esp_cam_sensor.h"
+#include "esp_err.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * @brief Handle of SCCB interface and sensor
- */
-typedef struct {
-    esp_sccb_io_handle_t sccb_handle;            /*!< SCCB io handle that created by `sccb_new_i2c_io` */
-    i2c_master_bus_handle_t i2c_bus_handle;      /*!< I2C bus handle that created by `i2c_new_master_bus` */
-} example_sensor_handle_t;
+// Разрешение камеры — 800x640 RAW8 50fps (ближайший поддерживаемый формат
+// OV5647)
+#define CAMERA_H_RES 800
+#define CAMERA_V_RES 640
+#define CAMERA_LANE_BITRATE 200 // Mbps
+
+// Формат для отображения на дисплее (ISP конвертирует RAW8 -> RGB565)
+#define CAMERA_OUTPUT_BPP 2 // RGB565 = 2 байта на пиксель
+#define CAMERA_FB_SIZE (CAMERA_H_RES * CAMERA_V_RES * CAMERA_OUTPUT_BPP)
 
 /**
- * @brief Configuration of SCCB interface and sensor
- */
-typedef struct {
-    int i2c_port_num;               /* SCCB: i2c port */
-    int i2c_sda_io_num;             /* SCCB: i2c SDA IO number */
-    int i2c_scl_io_num;             /* SCCB: i2c SCL IO number */
-    esp_cam_sensor_port_t port;     /* Sensor: interface of the camera sensor */
-    const char *format_name;        /* Sensor: format to be set for the camera sensor */
-} example_sensor_config_t;
-
-/**
- * @brief SCCB Interface and Sensor Init
+ * @brief Инициализация камеры OV5647
  *
- * @param[in]  sensor_config         Camera sensor configuration
- * @param[out] out_sensor_handle     Camera sensor handle
+ * Использует уже существующий I2C bus (от rpi_display).
+ * CSI → ISP → framebuffer (RGB565)
+ *
+ * @param i2c_bus  Существующий I2C bus handle
+ * @param fb       Указатель на framebuffer куда ISP будет писать RGB565
+ * @return ESP_OK или код ошибки
  */
-void example_sensor_init(example_sensor_config_t *sensor_config, example_sensor_handle_t *out_sensor_handle);
+esp_err_t camera_init(i2c_master_bus_handle_t i2c_bus, void *fb);
 
 /**
- * @brief SCCB Interface and Sensor Deinit
- *
- * @param[in] out_sensor_handle      Camera sensor handle
+ * @brief Получить один кадр (блокирующий вызов)
  */
-void example_sensor_deinit(example_sensor_handle_t sensor_handle);
+esp_err_t camera_get_frame(void);
+
+/**
+ * @brief Деинициализация камеры
+ */
+esp_err_t camera_deinit(void);
 
 #ifdef __cplusplus
 }

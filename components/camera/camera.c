@@ -27,8 +27,7 @@ static esp_cam_ctlr_trans_t s_trans;
 static SemaphoreHandle_t s_frame_sem = NULL;
 
 static bool s_on_get_new_trans(esp_cam_ctlr_handle_t handle,
-                                esp_cam_ctlr_trans_t *trans, void *user_data)
-{
+                               esp_cam_ctlr_trans_t *trans, void *user_data) {
     // Переподаём тот же буфер для следующего кадра
     trans->buffer = s_fb;
     trans->buflen = CAMERA_FB_SIZE;
@@ -36,8 +35,7 @@ static bool s_on_get_new_trans(esp_cam_ctlr_handle_t handle,
 }
 
 static bool s_on_trans_finished(esp_cam_ctlr_handle_t handle,
-                                 esp_cam_ctlr_trans_t *trans, void *user_data)
-{
+                                esp_cam_ctlr_trans_t *trans, void *user_data) {
     esp_cache_msync(s_fb, CAMERA_FB_SIZE, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
     // Сигнализируем что кадр готов
     BaseType_t high_task_woken = pdFALSE;
@@ -126,12 +124,13 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c_bus, void *fb) {
     ESP_ERROR_CHECK(esp_cam_new_csi_ctlr(&csi_cfg, &s_cam_handle));
 
     s_frame_sem = xSemaphoreCreateBinary();
-    
+
     esp_cam_ctlr_evt_cbs_t cbs = {
-        .on_get_new_trans  = s_on_get_new_trans,
+        .on_get_new_trans = s_on_get_new_trans,
         .on_trans_finished = s_on_trans_finished,
     };
-    ESP_ERROR_CHECK(esp_cam_ctlr_register_event_callbacks(s_cam_handle, &cbs, s_frame_sem));
+    ESP_ERROR_CHECK(
+        esp_cam_ctlr_register_event_callbacks(s_cam_handle, &cbs, s_frame_sem));
     ESP_ERROR_CHECK(esp_cam_ctlr_enable(s_cam_handle));
 
     // ── 3. ISP ───────────────────────────────────────────────────────────────
@@ -144,9 +143,32 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c_bus, void *fb) {
         .has_line_end_packet = false,
         .h_res = CAMERA_H_RES,
         .v_res = CAMERA_V_RES,
+        .bayer_order = COLOR_RAW_ELEMENT_ORDER_GRBG,
     };
     ESP_ERROR_CHECK(esp_isp_new_processor(&isp_cfg, &s_isp_proc));
     ESP_ERROR_CHECK(esp_isp_enable(s_isp_proc));
+    // Demosaic — конвертация Bayer паттерна в цвет
+    esp_isp_demosaic_config_t demosaic_cfg = {
+        .grad_ratio = {.val = 0},
+        .padding_mode = ISP_DEMOSAIC_EDGE_PADDING_MODE_SRND_DATA,
+        .padding_data = 0,
+        .padding_line_tail_valid_start_pixel = 0,
+        .padding_line_tail_valid_end_pixel = 0,
+    };
+    ESP_ERROR_CHECK(esp_isp_demosaic_configure(s_isp_proc, &demosaic_cfg));
+    ESP_ERROR_CHECK(esp_isp_demosaic_enable(s_isp_proc));
+
+    // BF — шумоподавление
+    esp_isp_bf_config_t bf_cfg = {
+        .padding_mode = ISP_BF_EDGE_PADDING_MODE_SRND_DATA,
+        .padding_data = 0,
+        .bf_template = {{1, 2, 1}, {2, 4, 2}, {1, 2, 1}},
+        .denoising_level = 5,
+        .padding_line_tail_valid_start_pixel = 0,
+        .padding_line_tail_valid_end_pixel = 0,
+    };
+    ESP_ERROR_CHECK(esp_isp_bf_configure(s_isp_proc, &bf_cfg));
+    ESP_ERROR_CHECK(esp_isp_bf_enable(s_isp_proc));
 
     // ── 4. Старт ─────────────────────────────────────────────────────────────
     s_trans.buffer = s_fb;
@@ -158,8 +180,7 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c_bus, void *fb) {
     return ESP_OK;
 }
 
-esp_err_t camera_get_frame(void)
-{
+esp_err_t camera_get_frame(void) {
     if (xSemaphoreTake(s_frame_sem, pdMS_TO_TICKS(1000)) == pdTRUE) {
         return ESP_OK;
     }

@@ -113,10 +113,10 @@ void app_main(void) {
 
     // 4. Рисуем UI
     // Внутри lvgl_port_lock:
-    if (lvgl_port_lock(0)) {
-        lv_demo_widgets();
-        lvgl_port_unlock();
-    }
+    //if (lvgl_port_lock(0)) {
+    //    lv_demo_widgets();
+    //    lvgl_port_unlock();
+    //}
 
     ESP_LOGI(TAG, "Done");
     while (1) {
@@ -124,7 +124,6 @@ void app_main(void) {
         if (ret == ESP_OK) {
             ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640,
                                       rpi_display_get_framebuffer(), 800, 480);
-            ESP_LOGI(TAG, "Frame received");
         } else {
             ESP_LOGE(TAG, "Frame error: %s", esp_err_to_name(ret));
         }

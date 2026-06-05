@@ -52,7 +52,7 @@ esp_err_t ppa_conv_rgb565_to_rgb888(const void *src, uint32_t src_w, uint32_t sr
         .scale_y        = 1.0f,
         .mirror_x       = false,
         .mirror_y       = false,
-        .rgb_swap       = false,
+        .rgb_swap       = true,
         .byte_swap      = false,
         .mode           = PPA_TRANS_MODE_BLOCKING,
     };

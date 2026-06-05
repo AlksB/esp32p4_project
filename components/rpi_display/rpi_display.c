@@ -317,3 +317,8 @@ esp_err_t rpi_display_set_brightness(uint8_t brightness)
 {
     return attiny_write(REG_PWM, brightness);
 }
+
+i2c_master_bus_handle_t rpi_display_get_i2c_bus(void)
+{
+    return s_i2c_bus;
+}

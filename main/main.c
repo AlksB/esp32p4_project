@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "rpi_display.h"
 #include "esp_lvgl_port.h"
+#include "esp_lcd_touch_ft5x06.h"
 #include "lvgl.h"
 
 static const char *TAG = "main";
@@ -62,6 +63,39 @@ void app_main(void)
         .flags.avoid_tearing = false,
     };
     lv_display_t *disp = lvgl_port_add_disp_dsi(&disp_cfg, &dsi_cfg);
+
+    // Touch init
+    esp_lcd_panel_io_handle_t tp_io = NULL;
+    esp_lcd_panel_io_i2c_config_t tp_io_cfg = {
+        .dev_addr = ESP_LCD_TOUCH_IO_I2C_FT5x06_ADDRESS,
+        .control_phase_bytes = 1,
+        .dc_bit_offset = 0,
+        .lcd_cmd_bits = 8,
+        .flags.disable_control_phase = 1,
+        .scl_speed_hz = 100000,
+    };
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(
+        rpi_display_get_i2c_bus(), &tp_io_cfg, &tp_io));
+    
+    esp_lcd_touch_handle_t tp = NULL;
+    esp_lcd_touch_config_t tp_cfg = {
+        .x_max = RPI_DISPLAY_WIDTH,
+        .y_max = RPI_DISPLAY_HEIGHT,
+        .rst_gpio_num = -1,
+        .int_gpio_num = -1,
+        .flags = {
+            .mirror_x = true,
+            .mirror_y = true,
+        },
+    };
+    ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_ft5x06(tp_io, &tp_cfg, &tp));
+    
+    // Подключаем к LVGL
+    const lvgl_port_touch_cfg_t touch_cfg = {
+        .disp  = disp,
+        .handle = tp,
+    };
+    lvgl_port_add_touch(&touch_cfg);
 
     // 4. Рисуем UI
     if (lvgl_port_lock(0)) {

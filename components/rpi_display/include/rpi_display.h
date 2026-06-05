@@ -2,6 +2,7 @@
 
 #include "esp_err.h"
 #include "esp_lcd_mipi_dsi.h"
+#include "driver/i2c_master.h"
 #include "esp_lcd_panel_ops.h"
 
 #ifdef __cplusplus
@@ -94,6 +95,11 @@ esp_err_t rpi_display_flush_framebuffer(void);
  * @brief Set backlight brightness (0-255)
  */
 esp_err_t rpi_display_set_brightness(uint8_t brightness);
+
+/**
+ * @brief Get I2C bus handle (для touch контроллера)
+ */
+i2c_master_bus_handle_t rpi_display_get_i2c_bus(void);
 
 #ifdef __cplusplus
 }

@@ -47,8 +47,8 @@ void app_main(void) {
     const lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = NULL,
         .panel_handle = rpi_display_get_panel(),
-        .buffer_size = RPI_DISPLAY_WIDTH * 30,
-        .double_buffer = false,
+        .buffer_size = RPI_DISPLAY_WIDTH * 150,
+        .double_buffer = true,
         .hres = RPI_DISPLAY_WIDTH,
         .vres = RPI_DISPLAY_HEIGHT,
         .monochrome = false,
@@ -57,6 +57,7 @@ void app_main(void) {
             {
                 .buff_spiram = true,
                 .sw_rotate = false,
+                .direct_mode = 0,
             },
     };
     const lvgl_port_display_dsi_cfg_t dsi_cfg = {

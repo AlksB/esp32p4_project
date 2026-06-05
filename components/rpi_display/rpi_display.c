@@ -181,7 +181,7 @@ static esp_err_t s_dsi_panel_init(const rpi_display_config_t *cfg)
 
     // DPI panel
     esp_lcd_dpi_panel_config_t dpi_cfg = {
-        .num_fbs            = 1,
+        .num_fbs            = 2,
         .dpi_clk_src        = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
         .dpi_clock_freq_mhz = 25.98,
         .virtual_channel    = 0,

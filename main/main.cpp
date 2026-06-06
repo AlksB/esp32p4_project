@@ -11,6 +11,7 @@
 #include "ppa_conv.h"
 #include "rpi_display.h"
 #include "soc/gpio_num.h"
+#include <cstring>
 
 static const char *TAG = "main";
 
@@ -18,12 +19,20 @@ static const char *GESTURE_NAMES[] = {"one",  "two",     "three",  "four",
                                       "five", "like",    "ok",     "no_gesture",
                                       "call", "dislike", "no_hand"};
 
+// Камера 800×640 вписывается в дисплей 800×480 по высоте
+// Ширина: 480 * 800/640 = 600, отступ слева: (800-600)/2 = 100
+static const int CAM_DISP_W = 600;
+static const int CAM_DISP_H = 480;
+static const int CAM_DISP_X = (RPI_DISPLAY_WIDTH - CAM_DISP_W) / 2;
+
 extern "C" void app_main(void) {
     ESP_LOGI(TAG, "Starting");
 
+    // Дисплей
     rpi_display_config_t cfg = RPI_DISPLAY_DEFAULT_CONFIG();
     ESP_ERROR_CHECK(rpi_display_init(&cfg));
 
+    // Камера
     ESP_LOGI(TAG, "Init camera...");
     void *cam_fb =
         heap_caps_aligned_alloc(128, CAMERA_FB_SIZE, MALLOC_CAP_SPIRAM);
@@ -32,15 +41,16 @@ extern "C" void app_main(void) {
     ESP_LOGI(TAG, "Camera OK");
     ESP_ERROR_CHECK(ppa_conv_init());
 
-    // Буфер для инференса
+    // Буфер для инференса 224×224 RGB888
     size_t gesture_buf_size = 224 * 224 * 3;
     uint8_t *gesture_buf = nullptr;
-    esp_dma_mem_info_t dma_info = {
+    esp_dma_mem_info_t gesture_dma_info = {
         .extra_heap_caps = MALLOC_CAP_SPIRAM,
         .dma_alignment_bytes = 64,
     };
-    ESP_ERROR_CHECK(esp_dma_capable_malloc(gesture_buf_size, &dma_info,
+    ESP_ERROR_CHECK(esp_dma_capable_malloc(gesture_buf_size, &gesture_dma_info,
                                            (void **)&gesture_buf, nullptr));
+    assert(gesture_buf != nullptr);
 
     gesture_task_init();
 
@@ -79,7 +89,6 @@ extern "C" void app_main(void) {
     tp_io_cfg.scl_speed_hz = 100000;
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(rpi_display_get_i2c_bus(),
                                              &tp_io_cfg, &tp_io));
-
     esp_lcd_touch_handle_t tp = nullptr;
     esp_lcd_touch_config_t tp_cfg = {};
     tp_cfg.x_max = RPI_DISPLAY_WIDTH;
@@ -92,9 +101,8 @@ extern "C" void app_main(void) {
     const lvgl_port_touch_cfg_t touch_cfg = {.disp = disp, .handle = tp};
     lvgl_port_add_touch(&touch_cfg);
 
-    // UI — canvas для камеры на весь экран
-    // Буфер canvas в PSRAM: 800×480 RGB888
-    size_t canvas_buf_size = RPI_DISPLAY_WIDTH * RPI_DISPLAY_HEIGHT * 3;
+    // Буфер canvas 600×480 RGB888
+    size_t canvas_buf_size = CAM_DISP_W * CAM_DISP_H * 3;
     esp_dma_mem_info_t canvas_dma_info = {
         .extra_heap_caps = MALLOC_CAP_SPIRAM,
         .dma_alignment_bytes = 64,
@@ -102,19 +110,19 @@ extern "C" void app_main(void) {
     void *canvas_buf = nullptr;
     ESP_ERROR_CHECK(esp_dma_capable_malloc(canvas_buf_size, &canvas_dma_info,
                                            &canvas_buf, nullptr));
-    assert(canvas_buf != nullptr);
     memset(canvas_buf, 0, canvas_buf_size);
 
+    // UI
     lv_obj_t *scr = lv_display_get_screen_active(disp);
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
 
-    // Canvas — сюда пишем кадр с камеры
+    // Canvas с изображением камеры по центру
     lv_obj_t *canvas = lv_canvas_create(scr);
-    lv_canvas_set_buffer(canvas, canvas_buf, RPI_DISPLAY_WIDTH,
-                         RPI_DISPLAY_HEIGHT, LV_COLOR_FORMAT_RGB888);
-    lv_obj_set_pos(canvas, 0, 0);
+    lv_canvas_set_buffer(canvas, canvas_buf, CAM_DISP_W, CAM_DISP_H,
+                         LV_COLOR_FORMAT_RGB888);
+    lv_obj_set_pos(canvas, CAM_DISP_X, 0);
 
-    // Прямоугольник поверх canvas
+    // Прямоугольник вокруг руки
     lv_obj_t *hand_rect = lv_obj_create(scr);
     lv_obj_remove_style_all(hand_rect);
     lv_obj_set_style_border_color(hand_rect, lv_color_hex(0x00ff00), 0);
@@ -142,25 +150,33 @@ extern "C" void app_main(void) {
             continue;
         }
 
-        // Инференс
+        // Инференс: 800×640 → 224×224
         ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640, gesture_buf, 224, 224);
         gesture_result_t res = gesture_task_run(gesture_buf, 224, 224);
 
-        // Камера → canvas буфер через PPA (800×640 → 800×480)
-        ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640, canvas_buf, 800, 480);
+        // Камера → canvas: 800×640 → 600×480 (сохранение пропорций)
+        ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640, canvas_buf, CAM_DISP_W,
+                                  CAM_DISP_H);
 
-        // Обновить UI
+        // Пересчёт bbox: 800×480 (из gesture_task) → 600×480
+        if (res.has_hand) {
+            res.x1 = res.x1 * CAM_DISP_W / 800;
+            res.y1 = res.y1 * CAM_DISP_H / 480;
+            res.x2 = res.x2 * CAM_DISP_W / 800;
+            res.y2 = res.y2 * CAM_DISP_H / 480;
+        }
+
         if (lvgl_port_lock(0)) {
-            // Инвалидировать canvas — LVGL перерисует его из обновлённого
-            // буфера
             lv_obj_invalidate(canvas);
 
             if (res.has_hand) {
                 lv_obj_clear_flag(hand_rect, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_clear_flag(gesture_label, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_set_pos(hand_rect, res.x1, res.y1);
+
+                // Позиция на экране = смещение canvas + позиция внутри canvas
+                lv_obj_set_pos(hand_rect, CAM_DISP_X + res.x1, res.y1);
                 lv_obj_set_size(hand_rect, res.x2 - res.x1, res.y2 - res.y1);
-                lv_obj_set_pos(gesture_label, res.x1,
+                lv_obj_set_pos(gesture_label, CAM_DISP_X + res.x1,
                                res.y1 > 20 ? res.y1 - 20 : 0);
                 if (res.label >= 0 && res.label < 11) {
                     lv_label_set_text(gesture_label, GESTURE_NAMES[res.label]);

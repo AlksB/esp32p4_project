@@ -1,5 +1,6 @@
 #include "camera.h"
 #include "demos/lv_demos.h"
+#include "esp_dma_utils.h"
 #include "esp_heap_caps.h"
 #include "esp_lcd_touch_ft5x06.h"
 #include "esp_log.h"
@@ -7,7 +8,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "gesture_task.hpp"
-#include "esp_dma_utils.h"
 #include "lvgl.h"
 #include "ppa_conv.h"
 #include "rpi_display.h"
@@ -62,8 +62,8 @@ void app_main(void) {
     ESP_ERROR_CHECK(esp_dma_capable_malloc(gesture_buf_size, &dma_info,
                                            (void **)&gesture_buf, NULL));
     assert(gesture_buf != NULL);
-    ESP_LOGI(TAG, "gesture_buf=%p align=%d",
-         gesture_buf, (int)((uintptr_t)gesture_buf % 64));
+    ESP_LOGI(TAG, "gesture_buf=%p align=%d", gesture_buf,
+             (int)((uintptr_t)gesture_buf % 64));
 
     assert(gesture_buf != NULL);
     assert(((uintptr_t)gesture_buf % 64) == 0);

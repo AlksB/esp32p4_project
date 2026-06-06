@@ -25,39 +25,50 @@ static int cat_name_to_label(const char *name) {
     return (int)GESTURE_NONE;
 }
 
-extern "C" void gesture_task_init(void) {
+void gesture_task_init(void) {
     s_detector = new HandDetect();
     s_recognizer = new HandGestureRecognizer();
     ESP_LOGI(TAG, "Initialized");
 }
 
-extern "C" int gesture_task_run(const uint8_t *rgb888, int width, int height) {
+gesture_result_t gesture_task_run(const uint8_t *rgb888, int width,
+                                  int height) {
+    gesture_result_t result = {.label = (int)GESTURE_NONE,
+                               .x1 = 0,
+                               .y1 = 0,
+                               .x2 = 0,
+                               .y2 = 0,
+                               .has_hand = false};
+
     dl::image::img_t img = {
         .data = (void *)rgb888,
         .width = (uint16_t)width,
-        .height = (uint16_t)height, // будет 224
+        .height = (uint16_t)height,
         .pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888,
     };
 
     auto detect_res = s_detector->run(img);
-    ESP_LOGI(TAG, "detect count=%d", (int)detect_res.size());
     if (detect_res.empty()) {
-        return (int)GESTURE_NONE;
+        return result;
     }
 
-    for (const auto &hand : detect_res) {
-        ESP_LOGI(TAG, "bbox: x1=%d y1=%d x2=%d y2=%d", hand.box[0], hand.box[1],
-                 hand.box[2], hand.box[3]);
-    }
+    // Берём первую руку, пересчитываем bbox 224×224 → 800×480
+    const auto &hand = detect_res.front();
+    result.has_hand = true;
+    result.x1 = hand.box[0] * 800 / 224;
+    result.y1 = hand.box[1] * 480 / 224;
+    result.x2 = hand.box[2] * 800 / 224;
+    result.y2 = hand.box[3] * 480 / 224;
 
+    // Классификация
     auto cls_results = s_recognizer->recognize(img, detect_res);
-    if (cls_results.empty()) {
-        return (int)GESTURE_NONE;
+    if (!cls_results.empty()) {
+        const auto &best = cls_results[0];
+        result.label = cat_name_to_label(best.cat_name);
+        ESP_LOGI(TAG, "cat=%s score=%.3f label=%d bbox=[%d,%d,%d,%d]",
+                 best.cat_name, best.score, result.label, result.x1, result.y1,
+                 result.x2, result.y2);
     }
 
-    const auto &best = cls_results[0];
-    int label = cat_name_to_label(best.cat_name);
-    ESP_LOGD(TAG, "cat=%s score=%.3f label=%d", best.cat_name, best.score,
-             label);
-    return label;
+    return result;
 }

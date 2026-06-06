@@ -4,3 +4,5 @@ dependencies:
   espressif/esp_lcd_touch_ft5x06: "*"
   lvgl/lvgl: "^9.0"
   espressif/esp_cam_sensor: "^1.1.0"
+  espressif/hand_gesture_recognition: "*"
+  espressif/hand_detect: "~0.1.1"

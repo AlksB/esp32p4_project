@@ -6,6 +6,8 @@
 #include "esp_lvgl_port.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "gesture_task.hpp"
+#include "esp_dma_utils.h"
 #include "lvgl.h"
 #include "ppa_conv.h"
 #include "rpi_display.h"
@@ -50,6 +52,22 @@ void app_main(void) {
     ESP_ERROR_CHECK(camera_init(rpi_display_get_i2c_bus(), cam_fb));
     ESP_LOGI(TAG, "Camera OK, getting frames...");
     ESP_ERROR_CHECK(ppa_conv_init());
+
+    size_t gesture_buf_size = 224 * 224 * 3;
+    uint8_t *gesture_buf = NULL;
+    esp_dma_mem_info_t dma_info = {
+        .extra_heap_caps = MALLOC_CAP_SPIRAM,
+        .dma_alignment_bytes = 64,
+    };
+    ESP_ERROR_CHECK(esp_dma_capable_malloc(gesture_buf_size, &dma_info,
+                                           (void **)&gesture_buf, NULL));
+    assert(gesture_buf != NULL);
+    ESP_LOGI(TAG, "gesture_buf=%p align=%d",
+         gesture_buf, (int)((uintptr_t)gesture_buf % 64));
+
+    assert(gesture_buf != NULL);
+    assert(((uintptr_t)gesture_buf % 64) == 0);
+    gesture_task_init();
 
     // 2. LVGL port init
     const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
@@ -113,7 +131,7 @@ void app_main(void) {
 
     // 4. Рисуем UI
     // Внутри lvgl_port_lock:
-    //if (lvgl_port_lock(0)) {
+    // if (lvgl_port_lock(0)) {
     //    lv_demo_widgets();
     //    lvgl_port_unlock();
     //}
@@ -121,11 +139,20 @@ void app_main(void) {
     ESP_LOGI(TAG, "Done");
     while (1) {
         esp_err_t ret = camera_get_frame();
-        if (ret == ESP_OK) {
-            ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640,
-                                      rpi_display_get_framebuffer(), 800, 480);
-        } else {
+        if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Frame error: %s", esp_err_to_name(ret));
+            continue;
+        }
+
+        // Дисплей: 800×640 → 800×480 RGB888
+        ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640,
+                                  rpi_display_get_framebuffer(), 800, 480);
+
+        // Жест: 800×640 → 128×128 RGB888 (аппаратный ресайз через PPA SRM)
+        ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640, gesture_buf, 224, 224);
+        int label = gesture_task_run(gesture_buf, 224, 224);
+        if (label != GESTURE_NONE) {
+            ESP_LOGI(TAG, "Gesture: %d", label);
         }
     }
 }

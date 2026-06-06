@@ -122,7 +122,7 @@ extern "C" void app_main(void) {
                          LV_COLOR_FORMAT_RGB888);
     lv_obj_set_pos(canvas, CAM_DISP_X, 0);
 
-    // Прямоугольник вокруг руки
+    // Прямоугольник руки — зелёный
     lv_obj_t *hand_rect = lv_obj_create(scr);
     lv_obj_remove_style_all(hand_rect);
     lv_obj_set_style_border_color(hand_rect, lv_color_hex(0x00ff00), 0);
@@ -132,9 +132,19 @@ extern "C" void app_main(void) {
     lv_obj_set_style_radius(hand_rect, 0, 0);
     lv_obj_add_flag(hand_rect, LV_OBJ_FLAG_HIDDEN);
 
+    // Прямоугольник жеста — жёлтый, внутри руки
+    lv_obj_t *gesture_rect = lv_obj_create(scr);
+    lv_obj_remove_style_all(gesture_rect);
+    lv_obj_set_style_border_color(gesture_rect, lv_color_hex(0xffff00), 0);
+    lv_obj_set_style_border_width(gesture_rect, 2, 0);
+    lv_obj_set_style_border_opa(gesture_rect, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_opa(gesture_rect, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_radius(gesture_rect, 0, 0);
+    lv_obj_add_flag(gesture_rect, LV_OBJ_FLAG_HIDDEN);
+
     // Метка жеста
     lv_obj_t *gesture_label = lv_label_create(scr);
-    lv_obj_set_style_text_color(gesture_label, lv_color_hex(0x00ff00), 0);
+    lv_obj_set_style_text_color(gesture_label, lv_color_hex(0xffff00), 0);
     lv_obj_set_style_text_font(gesture_label, &lv_font_montserrat_14, 0);
     lv_obj_set_style_bg_color(gesture_label, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(gesture_label, LV_OPA_50, 0);
@@ -158,12 +168,18 @@ extern "C" void app_main(void) {
         ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640, canvas_buf, CAM_DISP_W,
                                   CAM_DISP_H);
 
-        // Пересчёт bbox: 800×480 (из gesture_task) → 600×480
+        // Пересчёт bbox: 800×480 → 600×480 (canvas)
         if (res.has_hand) {
-            res.x1 = res.x1 * CAM_DISP_W / 800;
-            res.y1 = res.y1 * CAM_DISP_H / 480;
-            res.x2 = res.x2 * CAM_DISP_W / 800;
-            res.y2 = res.y2 * CAM_DISP_H / 480;
+            res.hand_x1 = res.hand_x1 * CAM_DISP_W / 800;
+            res.hand_y1 = res.hand_y1 * CAM_DISP_H / 480;
+            res.hand_x2 = res.hand_x2 * CAM_DISP_W / 800;
+            res.hand_y2 = res.hand_y2 * CAM_DISP_H / 480;
+        }
+        if (res.has_gesture) {
+            res.gesture_x1 = res.gesture_x1 * CAM_DISP_W / 800;
+            res.gesture_y1 = res.gesture_y1 * CAM_DISP_H / 480;
+            res.gesture_x2 = res.gesture_x2 * CAM_DISP_W / 800;
+            res.gesture_y2 = res.gesture_y2 * CAM_DISP_H / 480;
         }
 
         if (lvgl_port_lock(0)) {
@@ -171,20 +187,31 @@ extern "C" void app_main(void) {
 
             if (res.has_hand) {
                 lv_obj_clear_flag(hand_rect, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_clear_flag(gesture_label, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_pos(hand_rect, CAM_DISP_X + res.hand_x1,
+                               res.hand_y1);
+                lv_obj_set_size(hand_rect, res.hand_x2 - res.hand_x1,
+                                res.hand_y2 - res.hand_y1);
+            } else {
+                lv_obj_add_flag(hand_rect, LV_OBJ_FLAG_HIDDEN);
+            }
 
-                // Позиция на экране = смещение canvas + позиция внутри canvas
-                lv_obj_set_pos(hand_rect, CAM_DISP_X + res.x1, res.y1);
-                lv_obj_set_size(hand_rect, res.x2 - res.x1, res.y2 - res.y1);
-                lv_obj_set_pos(gesture_label, CAM_DISP_X + res.x1,
-                               res.y1 > 20 ? res.y1 - 20 : 0);
+            if (res.has_gesture) {
+                lv_obj_clear_flag(gesture_rect, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_clear_flag(gesture_label, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_pos(gesture_rect, CAM_DISP_X + res.gesture_x1,
+                               res.gesture_y1);
+                lv_obj_set_size(gesture_rect, res.gesture_x2 - res.gesture_x1,
+                                res.gesture_y2 - res.gesture_y1);
+                lv_obj_set_pos(gesture_label, CAM_DISP_X + res.gesture_x1,
+                               res.gesture_y1 > 20 ? res.gesture_y1 - 20 : 0);
                 if (res.label >= 0 && res.label < 11) {
                     lv_label_set_text(gesture_label, GESTURE_NAMES[res.label]);
                 }
             } else {
-                lv_obj_add_flag(hand_rect, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(gesture_rect, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_add_flag(gesture_label, LV_OBJ_FLAG_HIDDEN);
             }
+
             lvgl_port_unlock();
         }
     }

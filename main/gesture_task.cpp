@@ -45,6 +45,11 @@ extern "C" int gesture_task_run(const uint8_t *rgb888, int width, int height) {
         return (int)GESTURE_NONE;
     }
 
+    for (const auto &hand : detect_res) {
+        ESP_LOGI(TAG, "bbox: x1=%d y1=%d x2=%d y2=%d", hand.box[0], hand.box[1],
+                 hand.box[2], hand.box[3]);
+    }
+
     auto cls_results = s_recognizer->recognize(img, detect_res);
     if (cls_results.empty()) {
         return (int)GESTURE_NONE;

@@ -69,6 +69,112 @@ esp_err_t ppa_conv_rgb565_to_rgb888(const void *src, uint32_t src_w,
     return ESP_OK;
 }
 
+esp_err_t ppa_cut_center_to224_rgb565_to_888(const void *src, uint32_t src_w,
+                                             uint32_t src_h, void *dst,
+                                             uint32_t dst_w, uint32_t dst_h) {
+    if (!s_ppa_srm)
+        return ESP_ERR_INVALID_STATE;
+
+    // Sync src cache before PPA reads it
+    esp_cache_msync((void *)src, src_w * src_h * 2,
+                    ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    if (dst_h != dst_w || src_h > src_w)
+        return ESP_ERR_INVALID_ARG;
+    if (dst_h > src_h || dst_w > src_w)
+        return ESP_ERR_INVALID_ARG;
+    uint32_t src_block_hw = 597;
+
+    ppa_srm_oper_config_t srm_cfg = {
+        .in =
+            {
+                .buffer = (void *)src,
+                .pic_w = src_w,
+                .pic_h = src_h,
+                .block_w = src_block_hw,
+                .block_h = src_block_hw,
+                .block_offset_x = (src_w - src_block_hw) / 2,
+                .block_offset_y = (src_h - src_block_hw) / 2,
+                .srm_cm = PPA_SRM_COLOR_MODE_RGB565,
+            },
+        .out =
+            {
+                .buffer = dst,
+                .buffer_size = dst_w * dst_h * 3,
+                .pic_w = dst_w,
+                .pic_h = dst_h,
+                .block_offset_x = 0,
+                .block_offset_y = 0,
+                .srm_cm = PPA_SRM_COLOR_MODE_RGB888,
+            },
+        .rotation_angle = PPA_SRM_ROTATION_ANGLE_0,
+        .scale_x = 0.375,
+        .scale_y = 0.375,
+        .mirror_x = false,
+        .mirror_y = false,
+        .rgb_swap = true,
+        .byte_swap = false,
+        .mode = PPA_TRANS_MODE_BLOCKING,
+    };
+
+    ESP_RETURN_ON_ERROR(ppa_do_scale_rotate_mirror(s_ppa_srm, &srm_cfg), TAG,
+                        "PPA SRM failed");
+
+    // Sync dst cache after PPA writes
+    esp_cache_msync(dst, dst_w * dst_h * 3, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+
+    return ESP_OK;
+}
+esp_err_t ppa_conv_rgb888_to_rgb888(const void *src, uint32_t src_w,
+                                    uint32_t src_h, void *dst, uint32_t dst_w,
+                                    uint32_t dst_h) {
+    if (!s_ppa_srm)
+        return ESP_ERR_INVALID_STATE;
+
+    // Sync src cache before PPA reads it
+    esp_cache_msync((void *)src, src_w * src_h * 3,
+                    ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+
+    ppa_srm_oper_config_t srm_cfg = {
+        .in =
+            {
+                .buffer = (void *)src,
+                .pic_w = src_w,
+                .pic_h = src_h,
+                .block_w = src_w,
+                .block_h = src_h,
+                .block_offset_x = 0,
+                .block_offset_y = 0,
+                .srm_cm = PPA_SRM_COLOR_MODE_RGB888,
+            },
+        .out =
+            {
+                .buffer = dst,
+                .buffer_size = dst_w * dst_h * 3,
+                .pic_w = dst_w,
+                .pic_h = dst_h,
+                .block_offset_x = 0,
+                .block_offset_y = 0,
+                .srm_cm = PPA_SRM_COLOR_MODE_RGB888,
+            },
+        .rotation_angle = PPA_SRM_ROTATION_ANGLE_0,
+        .scale_x = (float)dst_w / src_w,
+        .scale_y = (float)dst_h / src_h,
+        .mirror_x = false,
+        .mirror_y = false,
+        .rgb_swap = false,
+        .byte_swap = false,
+        .mode = PPA_TRANS_MODE_BLOCKING,
+    };
+
+    ESP_RETURN_ON_ERROR(ppa_do_scale_rotate_mirror(s_ppa_srm, &srm_cfg), TAG,
+                        "PPA SRM failed");
+
+    // Sync dst cache after PPA writes
+    esp_cache_msync(dst, dst_w * dst_h * 3, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+
+    return ESP_OK;
+}
+
 esp_err_t ppa_conv_deinit(void) {
     if (s_ppa_srm) {
         ppa_unregister_client(s_ppa_srm);

@@ -48,13 +48,12 @@ gesture_result_t gesture_task_run(const uint8_t *rgb888, int width,
         return result;
     }
 
-    // bbox руки в координатах 224×224
     const auto &hand = detect_res.front();
     result.has_hand = true;
-    result.hand_x1 = hand.box[0] * 800 / 224;
-    result.hand_y1 = hand.box[1] * 480 / 224;
-    result.hand_x2 = hand.box[2] * 800 / 224;
-    result.hand_y2 = hand.box[3] * 480 / 224;
+    result.hand_x1 = hand.box[0];
+    result.hand_y1 = hand.box[1];
+    result.hand_x2 = hand.box[2];
+    result.hand_y2 = hand.box[3];
 
     // Классификация жеста
     auto cls_results = s_recognizer->recognize(img, detect_res);
@@ -64,13 +63,10 @@ gesture_result_t gesture_task_run(const uint8_t *rgb888, int width,
         result.score = best.score;
         result.has_gesture = true;
 
-        // bbox жеста совпадает с bbox руки — классификатор работает внутри него
-        // но можно немного уменьшить для визуального различия
-        int margin = (result.hand_x2 - result.hand_x1) / 10;
-        result.gesture_x1 = result.hand_x1 + margin;
-        result.gesture_y1 = result.hand_y1 + margin;
-        result.gesture_x2 = result.hand_x2 - margin;
-        result.gesture_y2 = result.hand_y2 - margin;
+        result.gesture_x1 = hand.box[0];
+        result.gesture_y1 = hand.box[1];
+        result.gesture_x2 = hand.box[2];
+        result.gesture_y2 = hand.box[3];
 
         ESP_LOGI(TAG, "cat=%s score=%.3f", best.cat_name, best.score);
     }

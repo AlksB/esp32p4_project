@@ -23,7 +23,9 @@ static const char *GESTURE_NAMES[] = {"one",  "two",     "three",  "four",
 // Ширина: 480 * 800/640 = 600, отступ слева: (800-600)/2 = 100
 static const int CAM_DISP_W = 600;
 static const int CAM_DISP_H = 480;
-static const int CAM_DISP_X = (RPI_DISPLAY_WIDTH - CAM_DISP_W) / 2;
+static const int CAM_DISP_X = 0;
+static const int CAM_DISP_Y = 0;
+static const int GESTURE_BUFFER_HW = 224;
 
 extern "C" void app_main(void) {
     ESP_LOGI(TAG, "Starting");
@@ -42,7 +44,7 @@ extern "C" void app_main(void) {
     ESP_ERROR_CHECK(ppa_conv_init());
 
     // Буфер для инференса 224×224 RGB888
-    size_t gesture_buf_size = 224 * 224 * 3;
+    size_t gesture_buf_size = GESTURE_BUFFER_HW * GESTURE_BUFFER_HW * 3;
     uint8_t *gesture_buf = nullptr;
     esp_dma_mem_info_t gesture_dma_info = {
         .extra_heap_caps = MALLOC_CAP_SPIRAM,
@@ -118,9 +120,12 @@ extern "C" void app_main(void) {
 
     // Canvas с изображением камеры по центру
     lv_obj_t *canvas = lv_canvas_create(scr);
-    lv_canvas_set_buffer(canvas, canvas_buf, CAM_DISP_W, CAM_DISP_H,
-                         LV_COLOR_FORMAT_RGB888);
-    lv_obj_set_pos(canvas, CAM_DISP_X, 0);
+    lv_canvas_set_buffer(canvas, gesture_buf, GESTURE_BUFFER_HW,
+                         GESTURE_BUFFER_HW, LV_COLOR_FORMAT_RGB888);
+    lv_obj_set_pos(canvas, CAM_DISP_X, CAM_DISP_Y);
+    lv_obj_set_style_border_color(canvas, lv_color_hex(0xffffff), 0);
+    lv_obj_set_style_border_width(canvas, 3, 0);
+    lv_obj_set_style_border_opa(canvas, LV_OPA_COVER, 0);
 
     // Прямоугольник руки — зелёный
     lv_obj_t *hand_rect = lv_obj_create(scr);
@@ -161,26 +166,32 @@ extern "C" void app_main(void) {
         }
 
         // Инференс: 800×640 → 224×224
-        ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640, gesture_buf, 224, 224);
-        gesture_result_t res = gesture_task_run(gesture_buf, 224, 224);
+        ppa_cut_center_to224_rgb565_to_888(cam_fb, 800, 640, gesture_buf,
+                                           GESTURE_BUFFER_HW,
+                                           GESTURE_BUFFER_HW);
+        gesture_result_t res =
+            gesture_task_run(gesture_buf, GESTURE_BUFFER_HW, GESTURE_BUFFER_HW);
 
-        // Камера → canvas: 800×640 → 600×480 (сохранение пропорций)
-        ppa_conv_rgb565_to_rgb888(cam_fb, 800, 640, canvas_buf, CAM_DISP_W,
-                                  CAM_DISP_H);
+        //        // Камера → canvas: 800×640 → 600×480 (сохранение пропорций)
+        //        ppa_conv_rgb888_to_rgb888(gesture_buf, 224, 224, canvas_buf,
+        //        CAM_DISP_W,
+        //                                  CAM_DISP_H);
 
-        // Пересчёт bbox: 800×480 → 600×480 (canvas)
-        if (res.has_hand) {
-            res.hand_x1 = res.hand_x1 * CAM_DISP_W / 800;
-            res.hand_y1 = res.hand_y1 * CAM_DISP_H / 480;
-            res.hand_x2 = res.hand_x2 * CAM_DISP_W / 800;
-            res.hand_y2 = res.hand_y2 * CAM_DISP_H / 480;
-        }
-        if (res.has_gesture) {
-            res.gesture_x1 = res.gesture_x1 * CAM_DISP_W / 800;
-            res.gesture_y1 = res.gesture_y1 * CAM_DISP_H / 480;
-            res.gesture_x2 = res.gesture_x2 * CAM_DISP_W / 800;
-            res.gesture_y2 = res.gesture_y2 * CAM_DISP_H / 480;
-        }
+        // // Пересчёт bbox: 800×480 → 600×480 (canvas)
+        // if (res.has_hand) {
+        //     ESP_LOGI(TAG, "Hand detected at: %i, %i, %i, %i", res.hand_x1,
+        //              res.hand_y1, res.hand_x2, res.hand_y2);
+        //     res.hand_x1 = res.hand_x1 * CAM_DISP_W / 224;
+        //     res.hand_y1 = res.hand_y1 * CAM_DISP_H / 224;
+        //     res.hand_x2 = res.hand_x2 * CAM_DISP_W / 224;
+        //     res.hand_y2 = res.hand_y2 * CAM_DISP_H / 224;
+        // }
+        // if (res.has_gesture) {
+        //     res.gesture_x1 = res.gesture_x1 * CAM_DISP_W / 800;
+        //     res.gesture_y1 = res.gesture_y1 * CAM_DISP_H / 480;
+        //     res.gesture_x2 = res.gesture_x2 * CAM_DISP_W / 800;
+        //     res.gesture_y2 = res.gesture_y2 * CAM_DISP_H / 480;
+        // }
 
         if (lvgl_port_lock(0)) {
             lv_obj_invalidate(canvas);
@@ -188,7 +199,7 @@ extern "C" void app_main(void) {
             if (res.has_hand) {
                 lv_obj_clear_flag(hand_rect, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_set_pos(hand_rect, CAM_DISP_X + res.hand_x1,
-                               res.hand_y1);
+                               CAM_DISP_Y + res.hand_y1);
                 lv_obj_set_size(hand_rect, res.hand_x2 - res.hand_x1,
                                 res.hand_y2 - res.hand_y1);
             } else {
@@ -199,11 +210,13 @@ extern "C" void app_main(void) {
                 lv_obj_clear_flag(gesture_rect, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_clear_flag(gesture_label, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_set_pos(gesture_rect, CAM_DISP_X + res.gesture_x1,
-                               res.gesture_y1);
+                               CAM_DISP_Y + res.gesture_y1);
                 lv_obj_set_size(gesture_rect, res.gesture_x2 - res.gesture_x1,
                                 res.gesture_y2 - res.gesture_y1);
                 lv_obj_set_pos(gesture_label, CAM_DISP_X + res.gesture_x1,
-                               res.gesture_y1 > 20 ? res.gesture_y1 - 20 : 0);
+                               (CAM_DISP_Y + res.gesture_y1) > 20
+                                   ? CAM_DISP_Y + res.gesture_y1 - 20
+                                   : 0);
                 if (res.label >= 0 && res.label < 11) {
                     lv_label_set_text(gesture_label, GESTURE_NAMES[res.label]);
                 }

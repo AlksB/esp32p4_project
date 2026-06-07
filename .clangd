@@ -1,0 +1,19 @@
+CompileFlags:
+  Remove:
+    - -fno-shrink-wrap
+    - -fno-jump-tables
+    - -fno-tree-switch-conversion
+    - -fstrict-volatile-bitfields
+    - -fmacro-prefix-map=*
+    - -march=rv32imafc_zicsr_zifencei_xesploop*
+    - -march=rv32imafc_zicsr_zifencei_xesppie*
+    - -mabi=ilp32f
+    - -nostartfiles
+    - -Wno-old-style-declaration
+    - -Werror=all
+  Add:
+    - --target=riscv32
+    - -march=rv32imafc
+    - --sysroot=/home/user/.espressif/tools/riscv32-esp-elf/esp-14.2.0_20251107/riscv32-esp-elf/riscv32-esp-elf
+    - -I/home/user/.espressif/tools/riscv32-esp-elf/esp-14.2.0_20251107/riscv32-esp-elf/riscv32-esp-elf/include/c++/14.2.0
+    - -I/home/user/.espressif/tools/riscv32-esp-elf/esp-14.2.0_20251107/riscv32-esp-elf/riscv32-esp-elf/include/c++/14.2.0/riscv32-esp-elf
